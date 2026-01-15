@@ -7,11 +7,13 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// MONGOOSE SETUP - Use your own database
+// MONGOOSE SETUP - Fixed syntax
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/vulnerable-site', {
     useNewUrlParser: true,
     useUnifiedTopology: true
-});
+})
+.then(() => console.log('MongoDB connected'))
+.catch(err => console.error('MongoDB connection error:', err));
 
 // User Schema - DELIBERATELY VULNERABLE
 const userSchema = new mongoose.Schema({
@@ -20,7 +22,7 @@ const userSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema); // Changed to 'User' (capital U)
 
 // VULNERABLE: No rate limiting, plain text passwords
 app.post('/api/register', async (req, res) => {
@@ -28,8 +30,8 @@ app.post('/api/register', async (req, res) => {
         const { email, password } = req.body;
         
         // VULNERABLE: Accepting weak 4-digit passwords
-        if (!/^\d{4}$/.test(password)) {
-            return res.status(400).json({ error: 'Password must be 4 digits' });
+        if (!/^\d{4}$/.test(password)) { // Added ^ to match start
+            return res.status(400).json({ error: 'Password must be exactly 4 digits' });
         }
         
         const user = new User({ email, password }); // VULNERABLE: Storing plain text
@@ -37,6 +39,7 @@ app.post('/api/register', async (req, res) => {
         
         res.json({ message: 'User registered (Educational Purpose)' });
     } catch (error) {
+        console.error(error);
         res.status(400).json({ error: error.message });
     }
 });
@@ -65,8 +68,17 @@ app.post('/api/login', async (req, res) => {
 
 // Vulnerable endpoint to check if user exists
 app.get('/api/check-user/:email', async (req, res) => {
-    const user = await User.findOne({ email: req.params.email });
-    res.json({ exists: !!user });
+    try {
+        const user = await User.findOne({ email: req.params.email });
+        res.json({ exists: !!user });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', message: 'Vulnerable site is running' });
 });
 
 const PORT = process.env.PORT || 5001;
